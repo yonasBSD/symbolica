@@ -540,7 +540,7 @@ fn get_license_key(email: String) -> PyResult<()> {
         .map_err(exceptions::PyConnectionError::new_err)
 }
 
-#[pyfunction(name = "S", signature = (*names,is_symmetric=None,is_antisymmetric=None,is_cyclesymmetric=None,is_linear=None,is_scalar=None,is_real=None,is_integer=None,is_positive=None,tags=None,custom_normalization=None,custom_print=None,custom_derivative=None,data=None))]
+#[pyfunction(name = "S", signature = (*names,is_symmetric=None,is_antisymmetric=None,is_cyclesymmetric=None,is_linear=None,is_scalar=None,is_real=None,is_integer=None,is_positive=None,tags=None,aliases=None,custom_normalization=None,custom_print=None,custom_derivative=None,data=None))]
 /// Shorthand notation for :func:`Expression.symbol`.
 fn symbol_shorthand(
     names: &Bound<'_, PyTuple>,
@@ -553,6 +553,7 @@ fn symbol_shorthand(
     is_integer: Option<bool>,
     is_positive: Option<bool>,
     tags: Option<Vec<String>>,
+    aliases: Option<Vec<String>>,
     custom_normalization: Option<PythonTransformer>,
     custom_print: Option<Py<PyAny>>,
     custom_derivative: Option<Py<PyAny>>,
@@ -572,6 +573,7 @@ fn symbol_shorthand(
         is_integer,
         is_positive,
         tags,
+        aliases,
         custom_normalization,
         custom_print,
         custom_derivative,
@@ -780,6 +782,12 @@ PyFunctionInfo {
                     type_info: || Option::<Vec<String>>::type_input(),
                 },
                 ParameterInfo {
+                    name: "aliases",
+                    kind: ParameterKind::PositionalOrKeyword,
+                    default: ParameterDefault::Expr(NONE_ARG),
+                    type_info: || Option::<Vec<String>>::type_input(),
+                },
+                ParameterInfo {
                     name: "custom_normalization",
                     kind: ParameterKind::PositionalOrKeyword,
                     default: ParameterDefault::Expr(NONE_ARG),
@@ -883,6 +891,8 @@ is_positive : Optional[bool]
     Set to true if the symbol is a positive number.
 tags: Optional[Sequence[str]]
     A list of tags to associate with the symbol.
+aliases: Optional[Sequence[str]]
+    A list of aliases for the symbol.
 custom_normalization : Optional[Transformer]
     A transformer that is called after every normalization. Note that the symbol
     name cannot be used in the transformer as this will lead to a definition of the
@@ -3723,7 +3733,7 @@ impl PythonExpression {
     /// >>> e = S('real_log', custom_normalization=Transformer().replace(E("x_(exp(x1_))"), E("x1_")))
     /// >>> E("real_log(exp(x)) + real_log(5)")
     #[gen_stub(skip)]
-    #[pyo3(signature = (*names,is_symmetric=None,is_antisymmetric=None,is_cyclesymmetric=None,is_linear=None,is_scalar=None,is_real=None,is_integer=None,is_positive=None,tags=None,custom_normalization=None, custom_print=None, custom_derivative=None, data=None))]
+    #[pyo3(signature = (*names,is_symmetric=None,is_antisymmetric=None,is_cyclesymmetric=None,is_linear=None,is_scalar=None,is_real=None,is_integer=None,is_positive=None,tags=None,aliases=None,custom_normalization=None, custom_print=None, custom_derivative=None, data=None))]
     #[classmethod]
     pub fn symbol(
         _cls: &Bound<'_, PyType>,
@@ -3738,6 +3748,7 @@ impl PythonExpression {
         is_integer: Option<bool>,
         is_positive: Option<bool>,
         tags: Option<Vec<String>>,
+        aliases: Option<Vec<String>>,
         custom_normalization: Option<PythonTransformer>,
         custom_print: Option<Py<PyAny>>,
         custom_derivative: Option<Py<PyAny>>,
@@ -3765,6 +3776,7 @@ impl PythonExpression {
             && is_integer.is_none()
             && is_positive.is_none()
             && tags.is_none()
+            && aliases.is_none()
             && custom_normalization.is_none()
             && custom_print.is_none()
             && custom_derivative.is_none()
@@ -3895,7 +3907,7 @@ impl PythonExpression {
             }
 
             if let Some(t) = tags {
-                symbol = symbol.with_tags(
+                symbol = symbol.with_aliases(
                     t.into_iter()
                         .map(|x| {
                             if x.contains("::") {
@@ -3906,6 +3918,10 @@ impl PythonExpression {
                         })
                         .collect::<Vec<_>>(),
                 );
+            }
+
+            if let Some(a) = aliases {
+                symbol = symbol.with_aliases(a);
             }
 
             if let Some(t) = data {
@@ -7851,6 +7867,12 @@ PyMethodsInfo {
                     type_info: || Option::<Vec<String>>::type_input(),
                 },
                 ParameterInfo {
+                    name: "aliases",
+                    kind: ParameterKind::PositionalOrKeyword,
+                    default: ParameterDefault::Expr(NONE_ARG),
+                    type_info: || Option::<Vec<String>>::type_input(),
+                },
+                ParameterInfo {
                     name: "custom_normalization",
                     kind: ParameterKind::PositionalOrKeyword,
                     default: ParameterDefault::Expr(NONE_ARG),
@@ -7955,6 +7977,8 @@ is_positive : Optional[bool]
     Set to true if the symbol is a positive number.
 tags: Optional[Sequence[str]]
     A list of tags to associate with the symbol.
+aliases: Optional[Sequence[str]]
+    A list of aliases for the symbol.
 custom_normalization : Optional[Transformer]
     A transformer that is called after every normalization. Note that the symbol
     name cannot be used in the transformer as this will lead to a definition of the
