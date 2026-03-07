@@ -3171,6 +3171,7 @@ extern "C" {{
         }
 
         #[derive(Debug, Clone)]
+        #[allow(dead_code)]
         enum RegInstr {
             Add(MemOrReg, u16, Vec<MemOrReg>),
             Mul(MemOrReg, u16, Vec<MemOrReg>),
@@ -3180,7 +3181,7 @@ extern "C" {{
             ExternalFun(usize, usize, Vec<usize>),
             IfElse(usize),
             Goto,
-            Label,
+            Label(Label),
             Join(usize, usize, usize, usize),
         }
 
@@ -3205,7 +3206,7 @@ extern "C" {{
                 Instr::ExternalFun(r, s, a) => RegInstr::ExternalFun(*r, *s, a.clone()),
                 Instr::IfElse(c, _) => RegInstr::IfElse(*c),
                 Instr::Goto(_) => RegInstr::Goto,
-                Instr::Label(_) => RegInstr::Label,
+                Instr::Label(l) => RegInstr::Label(*l),
                 Instr::Join(r, c, a, b) => RegInstr::Join(*r, *c, *a, *b),
             })
             .collect();
@@ -3303,7 +3304,8 @@ extern "C" {{
                                 panic!("use outside of ASM block");
                             }
                         }
-                        RegInstr::Goto | RegInstr::Label => {}
+                        RegInstr::Label(_) => {}
+                        RegInstr::Goto => {}
                         RegInstr::Join(_, c, a, b) => {
                             if *c == old_reg || *a == old_reg || *b == old_reg {
                                 panic!("use outside of ASM block");
@@ -3317,8 +3319,48 @@ extern "C" {{
             }
         }
 
+        let mut label_stack = vec![];
+        let mut label_join_info = HashMap::default();
+        let mut in_join_section = false;
+        for (ins, _) in instr {
+            if in_join_section && !matches!(ins, Instr::Join(..)) {
+                in_join_section = false;
+                label_stack.pop().unwrap();
+            }
+
+            match ins {
+                Instr::IfElse(_, label) => {
+                    label_stack.push((*label, None));
+                }
+                Instr::Goto(l) => {
+                    if let Some(last) = label_stack.last_mut() {
+                        last.1 = Some(*l);
+                    }
+                }
+                Instr::Join(o, _, a, b) => {
+                    in_join_section = true; // could be more than one join if vectorized
+
+                    if let Some((label, label_2)) = label_stack.last() {
+                        label_join_info
+                            .entry(*label)
+                            .or_insert(vec![])
+                            .push((*o, *a));
+                        label_join_info
+                            .entry(label_2.unwrap())
+                            .or_insert(vec![])
+                            .push((*o, *b));
+                    } else {
+                        unreachable!("Goto without matching IfElse");
+                    }
+                }
+                _ => {
+                    in_join_section = false;
+                }
+            }
+        }
+
         let mut in_asm_block = false;
-        let mut close_else_branch = 0;
+        let mut next_label_is_true_branch_end = false;
         for ins in &new_instr {
             match ins {
                 RegInstr::Add(o, free, a) | RegInstr::Mul(o, free, a) => {
@@ -3964,38 +4006,25 @@ extern "C" {{
                     }
                 }
                 RegInstr::Goto => {
-                    end_asm_block!(in_asm_block);
-                    *out += "\t} else {\n";
-                    close_else_branch += 1;
+                    next_label_is_true_branch_end = true;
                 }
-                RegInstr::Label => {}
-                RegInstr::Join(o, cond, a, b) => {
+                RegInstr::Label(l) => {
                     end_asm_block!(in_asm_block);
-                    if close_else_branch > 0 {
-                        close_else_branch -= 1;
+
+                    for (o, b) in label_join_info.get(l).unwrap() {
+                        let arg_a = get_input!(*o);
+                        let arg_b = get_input!(*b);
+                        *out += &format!("\t{} = {};\n", arg_a, arg_b);
+                    }
+
+                    if next_label_is_true_branch_end {
+                        *out += "\t} else {\n";
+                        next_label_is_true_branch_end = false;
+                    } else {
                         *out += "\t}\n";
                     }
-                    let arg_a = get_input!(*a);
-                    let arg_b = get_input!(*b);
-
-                    if asm_flavour == InlineASM::AVX2 {
-                        *out += &format!(
-                            "\tZ[{}] = (all({} != 0.)) ? {} : {};\n",
-                            o,
-                            get_input!(*cond),
-                            arg_a,
-                            arg_b
-                        );
-                    } else {
-                        *out += &format!(
-                            "\tZ[{}] = ({} != 0.) ? {} : {};\n",
-                            o,
-                            get_input!(*cond),
-                            arg_a,
-                            arg_b
-                        );
-                    }
                 }
+                RegInstr::Join(_, _, _, _) => {}
             }
         }
 
@@ -4244,8 +4273,48 @@ extern "C" {{
             };
         }
 
+        let mut label_stack = vec![];
+        let mut label_join_info = HashMap::default();
+        let mut in_join_section = false;
+        for (ins, _) in instr {
+            if in_join_section && !matches!(ins, Instr::Join(..)) {
+                in_join_section = false;
+                label_stack.pop().unwrap();
+            }
+
+            match ins {
+                Instr::IfElse(_, label) => {
+                    label_stack.push((*label, None));
+                }
+                Instr::Goto(l) => {
+                    if let Some(last) = label_stack.last_mut() {
+                        last.1 = Some(*l);
+                    }
+                }
+                Instr::Join(o, _, a, b) => {
+                    in_join_section = true; // could be more than one join if vectorized
+
+                    if let Some((label, label_2)) = label_stack.last() {
+                        label_join_info
+                            .entry(*label)
+                            .or_insert(vec![])
+                            .push((*o, *a));
+                        label_join_info
+                            .entry(label_2.unwrap())
+                            .or_insert(vec![])
+                            .push((*o, *b));
+                    } else {
+                        unreachable!("Goto without matching IfElse");
+                    }
+                }
+                _ => {
+                    in_join_section = false;
+                }
+            }
+        }
+
         let mut in_asm_block = false;
-        let mut close_else_branch = 0;
+        let mut next_label_is_true_branch_end = false;
         for (ins, c) in instr {
             match ins {
                 Instr::Add(o, a) => {
@@ -4646,38 +4715,25 @@ extern "C" {{
                     }
                 }
                 Instr::Goto(_) => {
-                    end_asm_block!(in_asm_block);
-                    *out += "\t} else {\n";
-                    close_else_branch += 1;
+                    next_label_is_true_branch_end = true;
                 }
-                Instr::Label(_) => {}
-                Instr::Join(o, cond, a, b) => {
+                Instr::Label(l) => {
                     end_asm_block!(in_asm_block);
-                    if close_else_branch > 0 {
-                        close_else_branch -= 1;
+
+                    for (o, b) in label_join_info.get(l).unwrap() {
+                        let arg_a = get_input!(*o);
+                        let arg_b = get_input!(*b);
+                        *out += &format!("\t{} = {};\n", arg_a, arg_b);
+                    }
+
+                    if next_label_is_true_branch_end {
+                        *out += "\t} else {\n";
+                        next_label_is_true_branch_end = false;
+                    } else {
                         *out += "\t}\n";
                     }
-                    let arg_a = get_input!(*a);
-                    let arg_b = get_input!(*b);
-
-                    if asm_flavour == InlineASM::AVX2 {
-                        *out += &format!(
-                            "\tZ[{}] = (all({} != 0.)) ? {} : {};\n",
-                            o,
-                            get_input!(*cond),
-                            arg_a,
-                            arg_b
-                        );
-                    } else {
-                        *out += &format!(
-                            "\tZ[{}] = ({} != 0.) ? {} : {};\n",
-                            o,
-                            get_input!(*cond),
-                            arg_a,
-                            arg_b
-                        );
-                    }
                 }
+                Instr::Join(_, _, _, _) => {}
             }
         }
 
