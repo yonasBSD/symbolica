@@ -10,7 +10,10 @@ use std::{
 use rand::Rng;
 use wide::{f64x2, f64x4};
 
-use crate::domains::{RingOps, Set, integer::Integer};
+use crate::{
+    domains::{RingOps, Set, integer::Integer},
+    printer::{self, PrintMode},
+};
 
 use super::{EuclideanDomain, Field, InternalOrdering, Ring, SelfRing, rational::Rational};
 use rug::{
@@ -241,8 +244,8 @@ impl<T: SingleFloat + Hash + Eq + InternalOrdering> Ring for FloatField<T> {
     fn format<W: std::fmt::Write>(
         &self,
         element: &Self::Element,
-        opts: &crate::printer::PrintOptions,
-        state: crate::printer::PrintState,
+        opts: &printer::PrintOptions,
+        state: printer::PrintState,
         f: &mut W,
     ) -> Result<bool, fmt::Error> {
         if opts.mode.is_mathematica() {
@@ -298,11 +301,11 @@ impl SelfRing for F64 {
     #[inline(always)]
     fn format<W: std::fmt::Write>(
         &self,
-        opts: &crate::printer::PrintOptions,
-        state: crate::printer::PrintState,
+        opts: &printer::PrintOptions,
+        state: printer::PrintState,
         f: &mut W,
     ) -> Result<bool, fmt::Error> {
-        if opts.mode.is_mathematica() {
+        if opts.mode.is_mathematica() || opts.mode.is_latex() || opts.mode.is_typst() {
             let mut s = String::new();
             if let Some(p) = opts.precision {
                 if state.in_sum {
@@ -316,7 +319,19 @@ impl SelfRing for F64 {
                 s.write_fmt(format_args!("{self}"))?
             }
 
-            f.write_str(&s.replace('e', "*^"))?;
+            if s.contains('e') {
+                match opts.mode {
+                    PrintMode::Mathematica => s = s.replace('e', "*^"),
+                    PrintMode::Latex => s = s.replace('e', "\\cdot 10^{") + "}",
+                    PrintMode::Typst => s = s.replace('e', " dot 10^(") + ")",
+                    _ => {
+                        unreachable!()
+                    }
+                }
+            }
+
+            f.write_str(&s)?;
+
             return Ok(false);
         }
 
@@ -350,11 +365,11 @@ impl SelfRing for Float {
     #[inline(always)]
     fn format<W: std::fmt::Write>(
         &self,
-        opts: &crate::printer::PrintOptions,
-        state: crate::printer::PrintState,
+        opts: &printer::PrintOptions,
+        state: printer::PrintState,
         f: &mut W,
     ) -> Result<bool, fmt::Error> {
-        if opts.mode.is_mathematica() {
+        if opts.mode.is_mathematica() || opts.mode.is_latex() || opts.mode.is_typst() {
             let mut s = String::new();
             if let Some(p) = opts.precision {
                 if state.in_sum {
@@ -368,7 +383,19 @@ impl SelfRing for Float {
                 s.write_fmt(format_args!("{self}"))?
             }
 
-            f.write_str(&s.replace('e', "*^"))?;
+            if s.contains('e') {
+                match opts.mode {
+                    PrintMode::Mathematica => s = s.replace('e', "*^"),
+                    PrintMode::Latex => s = s.replace('e', "\\cdot 10^{") + "}",
+                    PrintMode::Typst => s = s.replace('e', " dot 10^(") + ")",
+                    _ => {
+                        unreachable!()
+                    }
+                }
+            }
+
+            f.write_str(&s)?;
+
             return Ok(false);
         }
 
@@ -402,8 +429,8 @@ impl SelfRing for Complex<Float> {
     #[inline(always)]
     fn format<W: std::fmt::Write>(
         &self,
-        opts: &crate::printer::PrintOptions,
-        mut state: crate::printer::PrintState,
+        opts: &printer::PrintOptions,
+        mut state: printer::PrintState,
         f: &mut W,
     ) -> Result<bool, fmt::Error> {
         let re_zero = SingleFloat::is_zero(&self.re);
@@ -1745,11 +1772,12 @@ impl<R: Into<Rational>> Add<R> for Float {
             return self;
         }
 
-        if rhs.denominator_ref().is_one() {
-            let Some(e1) = self.0.get_exp() else {
-                return self + rhs;
-            };
+        let Some(e1) = self.0.get_exp() else {
+            let np = self.prec();
+            return (self.0 + rhs.to_multi_prec_float(np).0).into();
+        };
 
+        if rhs.denominator_ref().is_one() {
             let e2 = get_bits(&rhs.numerator_ref());
             let old_prec = self.prec();
 
@@ -1769,11 +1797,6 @@ impl<R: Into<Rational>> Add<R> for Float {
 
             return r.into();
         }
-
-        let Some(e1) = self.0.get_exp() else {
-            let np = self.prec();
-            return (self.0 + rhs.to_multi_prec_float(np).0).into();
-        };
 
         // TODO: check off-by-one errors
         let e2 = get_bits(rhs.numerator_ref()) - get_bits(rhs.denominator_ref());
@@ -3044,7 +3067,7 @@ macro_rules! simd_impl {
 
             #[inline(always)]
             fn neg(&self) -> Self {
-                -self
+                -*self
             }
 
             #[inline(always)]
@@ -4395,14 +4418,7 @@ pub struct Decimal;
 #[cfg(feature = "python_stubgen")]
 impl PyStubType for Decimal {
     fn type_output() -> TypeInfo {
-        TypeInfo {
-            name: "decimal.Decimal".to_string(),
-            import: {
-                let mut h = std::collections::HashSet::default();
-                h.insert("decimal".into());
-                h
-            },
-        }
+        TypeInfo::with_module("decimal.Decimal", "decimal".into())
     }
 }
 
@@ -4454,12 +4470,21 @@ impl<'py> FromPyObject<'_, 'py> for PythonMultiPrecisionFloat {
                 .extract::<PyBackedStr>()?;
 
             // get the number of accurate digits
-            let digits = a
+            let mut digits = a
                 .chars()
                 .skip_while(|x| *x == '.' || *x == '0' || *x == '-')
                 .filter(|x| *x != '.')
                 .take_while(|x| x.is_ascii_digit())
                 .count();
+
+            // the input is 0, determine accuracy
+            if digits == 0 {
+                digits = a
+                    .chars()
+                    .filter(|x| *x != '.' && *x != '-')
+                    .take_while(|x| x.is_ascii_digit())
+                    .count()
+            }
 
             Ok(Float::parse(
                 &a,
