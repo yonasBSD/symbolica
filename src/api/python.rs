@@ -7314,6 +7314,10 @@ impl PythonExpression {
     ///     The number of cores to use for the optimization.
     /// verbose: bool, optional
     ///     Print the progress of the optimization.
+    /// jit_compile: bool, optional
+    ///    If set to `True`, the optimized expression will be compiled using JIT compilation
+    /// direct_translation: bool, optional
+    ///    If set to `True`, the optimized expression will be directly constructed from atom manipulations without building a tree.
     /// max_horner_scheme_variables: int, optional
     ///     The maximum number of variables in a Horner scheme.
     /// max_common_pair_cache_entries: int, optional
@@ -7337,6 +7341,7 @@ impl PythonExpression {
         n_cores = 4,
         verbose = false,
         jit_compile = true,
+        direct_translation = true,
         max_horner_scheme_variables = 500,
         max_common_pair_cache_entries = 1_000_000,
         max_common_pair_distance = 100,
@@ -7353,6 +7358,7 @@ impl PythonExpression {
         n_cores: usize,
         verbose: bool,
         jit_compile: bool,
+        direct_translation: bool,
         max_horner_scheme_variables: usize,
         max_common_pair_cache_entries: usize,
         max_common_pair_distance: usize,
@@ -7467,6 +7473,7 @@ impl PythonExpression {
             max_horner_scheme_variables,
             max_common_pair_cache_entries,
             max_common_pair_distance,
+            direct_translation,
             ..OptimizationSettings::default()
         };
 
@@ -7522,6 +7529,7 @@ impl PythonExpression {
         n_cores = 4,
         verbose = false,
         jit_compile = true,
+        direct_translation = true,
         max_horner_scheme_variables = 500,
         max_common_pair_cache_entries = 1_000_000,
         max_common_pair_distance = 100,
@@ -7539,6 +7547,7 @@ impl PythonExpression {
         n_cores: usize,
         verbose: bool,
         jit_compile: bool,
+        direct_translation: bool,
         max_horner_scheme_variables: usize,
         max_common_pair_cache_entries: usize,
         max_common_pair_distance: usize,
@@ -7652,6 +7661,7 @@ impl PythonExpression {
             max_horner_scheme_variables,
             max_common_pair_cache_entries,
             max_common_pair_distance,
+            direct_translation,
             ..OptimizationSettings::default()
         };
 
@@ -16053,8 +16063,8 @@ impl PythonExpressionEvaluator {
                 self.jit_compile,
                 self.eval_complex
                     .get_evaluator()
-                .clone()
-                .set_coeff(&self.rational_constants),
+                    .clone()
+                    .set_coeff(&self.rational_constants),
             ),
             bincode::config::standard(),
         )

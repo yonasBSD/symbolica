@@ -2224,6 +2224,7 @@ class Expression:
         n_cores: int = 4,
         verbose: bool = False,
         jit_compile: bool = True,
+        direct_translation: bool = True,
         max_horner_scheme_variables: int = 500,
         max_common_pair_cache_entries: int = 1000000,
         max_common_pair_distance: int = 100,
@@ -2287,6 +2288,8 @@ class Expression:
         jit_compile: bool, optional
             Just-in-time compile the evaluator upon first use with SymJIT. This can provide
             significant performance improvements.
+        direct_translation: bool, optional
+            If set to `True`, the optimized expression will be directly constructed from atoms without building a tree.
         max_horner_scheme_variables: int, optional
             The maximum number of variables in a Horner scheme.
         max_common_pair_cache_entries: int, optional
@@ -2296,7 +2299,7 @@ class Expression:
         external_functions: Optional[dict[Tuple[Expression, str], Callable[[Sequence[float | complex]], float | complex]]]
             A dictionary of external functions that can be called during evaluation.
             The key is a tuple of the function symbol and a printable function name. 
-            The value is a callable that takes a list of arguments and returns a float.
+            The value is a callable that takes a list of arguments and returns a float or complex number.
             This is useful for functions that are not defined in Symbolica but are available in Python.
         conditionals: Optional[Sequence[Expression]], optional
             A list of conditional functions. These functions should take three argument: a condition that is tested for
@@ -2315,6 +2318,7 @@ class Expression:
         n_cores: int = 4,
         verbose: bool = False,
         jit_compile: bool = True,
+        direct_translation: bool = True,
         max_horner_scheme_variables: int = 500,
         max_common_pair_cache_entries: int = 1000000,
         max_common_pair_distance: int = 100,
@@ -5794,6 +5798,7 @@ class Sample:
     c: List[float]
     """ A sample in the continuous layer. Empty if not present."""
 
+
 class Probe:
     """A probe that is used to access the Jacobian weight of a point or region
     of interest.
@@ -5834,6 +5839,7 @@ class Probe:
         """Create a probe with the given uniform indices and optional continuous sample.
         Entering `None` skips that dimension and includes the full
         range of the dimension (Jacobian weight of 1)."""
+
 
 class RandomNumberGenerator:
     """A reproducible, fast, non-cryptographic random number generator suitable for parallel Monte Carlo simulations.
