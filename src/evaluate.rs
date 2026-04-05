@@ -1944,30 +1944,30 @@ impl<T: Real> ExpressionEvaluator<T> {
         }
 
         for (t, p) in self.stack.iter_mut().zip(params) {
-            *t = p.clone();
+            t.set_from(p);
         }
 
-        let mut tmp;
+        let mut tmp = T::new_zero();
         let mut i = 0;
         while i < self.instructions.len() {
             let (instr, _) = unsafe { &self.instructions.get_unchecked(i) };
             match instr {
-                Instr::Add(r, v) => {
-                    tmp = self.stack[v[0]].clone();
-                    for x in &v[1..] {
-                        let e = self.stack[*x].clone();
-                        tmp += e;
+                Instr::Add(r, v) => unsafe {
+                    tmp.set_from(self.stack.get_unchecked(*v.get_unchecked(0)));
+                    for x in v.get_unchecked(1..) {
+                        tmp += self.stack.get_unchecked(*x);
                     }
-                    std::mem::swap(&mut self.stack[*r], &mut tmp);
-                }
-                Instr::Mul(r, v) => {
-                    tmp = self.stack[v[0]].clone();
-                    for x in &v[1..] {
-                        let e = self.stack[*x].clone();
-                        tmp *= e;
+
+                    std::mem::swap(self.stack.get_unchecked_mut(*r), &mut tmp);
+                },
+                Instr::Mul(r, v) => unsafe {
+                    tmp.set_from(self.stack.get_unchecked(*v.get_unchecked(0)));
+                    for x in v.get_unchecked(1..) {
+                        tmp *= self.stack.get_unchecked(*x);
                     }
-                    std::mem::swap(&mut self.stack[*r], &mut tmp);
-                }
+
+                    std::mem::swap(self.stack.get_unchecked_mut(*r), &mut tmp);
+                },
                 Instr::Pow(r, b, e) => {
                     if *e >= 0 {
                         self.stack[*r] = self.stack[*b].pow(*e as u64);
@@ -2019,7 +2019,7 @@ impl<T: Real> ExpressionEvaluator<T> {
         }
 
         for (o, i) in out.iter_mut().zip(&self.result_indices) {
-            *o = self.stack[*i].clone();
+            o.set_from(&self.stack[*i]);
         }
     }
 }
@@ -5988,30 +5988,30 @@ impl<T: Real> ExpressionEvaluatorWithExternalFunctions<T> {
         }
 
         for (t, p) in self.eval.stack.iter_mut().zip(params) {
-            *t = p.clone();
+            t.set_from(p);
         }
 
-        let mut tmp;
+        let mut tmp = T::new_zero();
         let mut i = 0;
         while i < self.eval.instructions.len() {
             let (instr, _) = unsafe { self.eval.instructions.get_unchecked(i) };
             match instr {
-                Instr::Add(r, v) => {
-                    tmp = self.eval.stack[v[0]].clone();
-                    for x in &v[1..] {
-                        let e = self.eval.stack[*x].clone();
-                        tmp += e;
+                Instr::Add(r, v) => unsafe {
+                    tmp.set_from(self.eval.stack.get_unchecked(*v.get_unchecked(0)));
+                    for x in v.get_unchecked(1..) {
+                        tmp += self.eval.stack.get_unchecked(*x);
                     }
-                    std::mem::swap(&mut self.eval.stack[*r], &mut tmp);
-                }
-                Instr::Mul(r, v) => {
-                    tmp = self.eval.stack[v[0]].clone();
-                    for x in &v[1..] {
-                        let e = self.eval.stack[*x].clone();
-                        tmp *= e;
+
+                    std::mem::swap(self.eval.stack.get_unchecked_mut(*r), &mut tmp);
+                },
+                Instr::Mul(r, v) => unsafe {
+                    tmp.set_from(self.eval.stack.get_unchecked(*v.get_unchecked(0)));
+                    for x in v.get_unchecked(1..) {
+                        tmp *= self.eval.stack.get_unchecked(*x);
                     }
-                    std::mem::swap(&mut self.eval.stack[*r], &mut tmp);
-                }
+
+                    std::mem::swap(self.eval.stack.get_unchecked_mut(*r), &mut tmp);
+                },
                 Instr::Pow(r, b, e) => {
                     if *e >= 0 {
                         self.eval.stack[*r] = self.eval.stack[*b].pow(*e as u64);
@@ -6070,7 +6070,7 @@ impl<T: Real> ExpressionEvaluatorWithExternalFunctions<T> {
         }
 
         for (o, i) in out.iter_mut().zip(&self.eval.result_indices) {
-            *o = self.eval.stack[*i].clone();
+            o.set_from(&self.eval.stack[*i]);
         }
     }
 }
