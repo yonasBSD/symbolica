@@ -2065,9 +2065,11 @@ impl<T: Real> ExpressionEvaluator<T> {
                     std::mem::swap(self.stack.get_unchecked_mut(*r), &mut tmp);
                 },
                 Instr::Pow(r, b, e) => {
-                    if *e >= 0 {
+                    if *e == -1 {
+                        self.stack[*r] = self.stack[*b].inv();
+                    } else if *e >= 0 {
                         self.stack[*r] = self.stack[*b].pow(*e as u64);
-                    } else {
+                    } else  {
                         self.stack[*r] = self.stack[*b].pow(e.unsigned_abs()).inv();
                     }
                 }

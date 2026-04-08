@@ -439,6 +439,21 @@ pub trait AtomCore: private::Sealed + Sized {
         self.as_atom_view().factor().wrap(self)
     }
 
+    /// Square-free factor the expression over the rationals.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use symbolica::{atom::AtomCore, parse};
+    /// let expr = parse!("x^2 - 1");
+    /// let factored = expr.factor();
+    /// let r = parse!("(x - 1) * (x + 1)");
+    /// assert_eq!(factored, r);
+    /// ```
+    fn factor_square_free(&self) -> Self::Output {
+        self.as_atom_view().factor_square_free().wrap(self)
+    }
+
     /// Collect numerical factors by removing the numerical content from additions.
     /// For example, `-2*x + 4*x^2 + 6*x^3` will be transformed into `-2*(x - 2*x^2 - 3*x^3)`.
     ///
