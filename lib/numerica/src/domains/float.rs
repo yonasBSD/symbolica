@@ -1796,6 +1796,15 @@ impl RealLike for DoubleFloat {
 
     #[inline(always)]
     fn round_to_nearest_integer(&self) -> Integer {
+        // TODO: change API to Result<Integer, _>
+        if !self.0.is_finite() {
+            return if self.0.hi().is_sign_negative() {
+                i64::MIN.into()
+            } else {
+                i64::MAX.into()
+            };
+        }
+
         Integer::from_f64((self.0.round()).hi())
     }
 }
@@ -1875,6 +1884,10 @@ impl Real for DoubleFloat {
 
     #[inline(always)]
     fn log(&self) -> Self {
+        if !self.0.hi().is_finite() {
+            return self.0.hi().ln().into();
+        }
+
         self.0.ln().into()
     }
 
@@ -1885,16 +1898,28 @@ impl Real for DoubleFloat {
 
     #[inline(always)]
     fn sin(&self) -> Self {
+        if !self.0.hi().is_finite() {
+            return self.0.hi().sin().into();
+        }
+
         self.0.sin().into()
     }
 
     #[inline(always)]
     fn cos(&self) -> Self {
+        if !self.0.hi().is_finite() {
+            return self.0.hi().cos().into();
+        }
+
         self.0.cos().into()
     }
 
     #[inline(always)]
     fn tan(&self) -> Self {
+        if !self.0.hi().is_finite() {
+            return self.0.hi().tan().into();
+        }
+
         self.0.tan().into()
     }
 
